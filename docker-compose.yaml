@@ -1,0 +1,99 @@
+services:
+  mongo-db:
+    image: mongo:latest
+    container_name: mongo_db
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo_db_data:/var/lib/mongodb
+    env_file:
+      - ./secret/.env
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    healthcheck:
+      test: mongosh --port 27017 --eval "db.adminCommand('ping')" --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - auction-be-network
+
+  mongo-rs-init:
+    image: mongo:latest
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+    entrypoint:
+      [
+        "mongosh",
+        "--host",
+        "mongo-db:27017",
+        "--eval",
+        "rs.initiate({ _id: 'rs0', members: [ { _id: 0, host: 'mongo-db:27017' } ] })",
+      ]
+    networks:
+      - auction-be-network
+
+  auction-backend: # Using image after push to Docker Hub
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: auction_backend
+    ports:
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    env_file:
+      - ./secret/.env
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+
+      - MONGO_HOST=mongo-db
+      - MONGO_PORT=27017
+      - MONGO_USER=${MONGO_USER}
+      - MONGO_PASS=${MONGO_PASS}
+      - MONGO_DB=${MONGO_DB}
+      - MONGO_MAX_POOL=${MONGO_MAX_POOL}
+      - MONGO_MIN_POOL=${MONGO_MIN_POOL}
+      - MONGO_TIMEOUT=${MONGO_TIMEOUT}
+      - MONGO_RETRY=${MONGO_RETRY}
+      - MONGO_AUTO_INDEX=${MONGO_AUTO_INDEX}
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo-db:27017/${MONGO_DB:-eauction_db}?replicaSet=rs0&maxPoolSize=${MONGO_MAX_POOL:-50}&minPoolSize=${MONGO_MIN_POOL:-10}&waitQueueTimeoutMS=${MONGO_TIMEOUT:-8000}&retryWrites=${MONGO_RETRY:-true}
+
+      - SERVER_ADDR=${SERVER_ADDR}
+      - SERVER_PORT=${SERVER_PORT}
+      - APP_BASE_URL=http://${SERVER_ADDR}:${SERVER_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_ACCESS_TOKEN_EXPIRATION_MINS=${JWT_ACCESS_TOKEN_EXPIRATION_MINS}
+      - JWT_REFRESH_TOKEN_EXPIRATION_DAYS=${JWT_REFRESH_TOKEN_EXPIRATION_DAYS}
+      - COOKIE_NAME=${COOKIE_NAME}
+      - COOKIE_HTTP_ONLY=${COOKIE_HTTP_ONLY}
+      - COOKIE_SECURE=${COOKIE_SECURE}
+      - COOKIE_MAX_AGE=${COOKIE_MAX_AGE}
+      - COOKIE_SAME_SITE=${COOKIE_SAME_SITE}
+      - VNP_TMN_CODE=${VNP_TMN_CODE}
+      - VNP_HASH_SECRET=${VNP_HASH_SECRET}
+      - VNP_RETURN_URL=${VNP_RETURN_URL}
+      - SEPAY_API_KEY=${SEPAY_API_KEY}
+      - SEPAY_BANK_ACCOUNT=${SEPAY_BANK_ACCOUNT}
+      - SEPAY_BANK_NAME=${SEPAY_BANK_NAME}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_S3_REGION=${AWS_S3_REGION}
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-8080}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - auction-be-network
+
+volumes:
+  mongo_db_data:
+    driver: local
+networks:
+  auction-be-network:
+    driver: bridge

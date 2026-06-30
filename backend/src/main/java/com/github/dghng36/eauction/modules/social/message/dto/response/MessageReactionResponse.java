@@ -1,0 +1,22 @@
+package com.github.dghng36.eauction.modules.social.message.dto.response;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.FieldDefaults;
+
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@FieldDefaults(level = lombok.AccessLevel.PRIVATE)
+public class MessageReactionResponse {
+    String emoji;
+
+    Integer count;
+
+    Boolean reacted;
+}
